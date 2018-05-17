@@ -1,0 +1,17 @@
+{
+	"name": "d-gemm",
+	"authors": [
+		"Shigeki Karita"
+	],
+	"dependencies": {
+		"mir-blas": "~>0.1.1",
+        "mir-algorithm": "0.6.21",
+        "mir-glas": "~>0.2.4",
+        "mir-cpuid": "~>0.5.2"
+	},
+    "libs": ["openblas"],
+    "lflags": ["-L$MIR_GLAS_PACKAGE_DIR", "-L$MIR_CPUID_PACKAGE_DIR"],
+	"description": "A minimal D application.",
+	"copyright": "Copyright © 2018, Shigeki Karita",
+	"license": "BSL-1.0"
+}

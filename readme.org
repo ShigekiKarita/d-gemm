@@ -1,0 +1,19 @@
+* D-GEMM
+
+naive implement of GEMM in D. only works with LDC1.7.0 because of mir-glas
+
+
+**  elapsed time [ms]
+
+| # row                     | 128 | 256 |  512 |  1024 |
+|---------------------------+-----+-----+------+-------|
+| for-loop                  |  43 | 328 | 2440 | 19507 |
+| +std.numeric.dotProduct   |  15 |  67 |  544 |  4000 |
+| +std.parallelism.parallel |  11 |  17 |  104 |   578 |
+| +static foreach unroll    |   9 |  16 |   71 |   469 |
+|---------------------------+-----+-----+------+-------|
+| mir-glas                  | *1* |  13 |  100 |   812 |
+| MKL                       |  14 | *3* | *28* | *146* |
+| OpenBLAS                  |   2 |  11 |   80 |   362 |
+
+Intel(R) Core(TM) i7-6850K CPU @ 3.60GHz
