@@ -2,18 +2,27 @@
 
 naive implement of GEMM in D. only works with LDC1.7.0 because of mir-glas
 
+**  setup
 
-**  elapsed time [ms]
+#+begin_src console
+$ curl https://dlang.org/install.sh | bash -s ldc-1.7.0
+$ dub run --compiler=ldc2 --build=release-nobounds
+#+end_src
 
-| # row                     | 128 | 256 |  512 |  1024 |
-|---------------------------+-----+-----+------+-------|
-| for-loop                  |  43 | 328 | 2440 | 19507 |
-| +std.numeric.dotProduct   |  15 |  67 |  544 |  4000 |
-| +std.parallelism.parallel |  11 |  17 |  104 |   578 |
-| +static foreach unroll    |   9 |  16 |   71 |   469 |
-|---------------------------+-----+-----+------+-------|
-| mir-glas                  | *1* |  13 |  100 |   812 |
-| MKL                       |  14 | *3* | *28* | *146* |
-| OpenBLAS                  |   2 |  11 |   80 |   362 |
+**  elapsed time [ms/gemm]
+
+| # row                     |  128 |  256 |   512 |   1024 |
+|---------------------------+------+------+-------+--------|
+| for-loop                  |  1.9 | 29.8 | 235.2 | 1950.7 |
+| std.numeric.dotProduct    |  0.7 |  6.1 |  49.4 |  412.0 |
+| mir.ndslice map/sum       |  0.5 |  4.5 |  34.8 |  274.0 |
+| +std.parallelism.parallel |  1.0 |  1.9 |   6.9 |   48.2 |
+| +static foreach unroll    |  0.7 |  1.4 |   6.2 |   47.0 |
+| +@fastmath/llvm_expect    |  0.7 |  1.3 |   6.2 |   47.5 |
+|---------------------------+------+------+-------+--------|
+| mir-glas                  |  0.1 |  1.2 |  13.7 |   79.8 |
+| MKL                       | 0.08 |  0.7 |   4.7 |   27.5 |
+| OpenBLAS                  |  0.2 |  1.1 |   8.0 |   36.2 |
 
 Intel(R) Core(TM) i7-6850K CPU @ 3.60GHz
+
