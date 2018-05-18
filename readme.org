@@ -2,6 +2,13 @@
 
 naive implement of GEMM in D. only works with LDC1.7.0 because of mir-glas
 
+**  setup
+
+#+begin_src bash
+curl https://dlang.org/install.sh | bash -s ldc-1.7.0
+sudo apt-get install libopenblas-dev
+dub run --compiler=ldc2 --build=release-nobounds
+#+end_src
 
 **  elapsed time [ms]
 
