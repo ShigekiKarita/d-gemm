@@ -27,6 +27,38 @@ auto asarray(S)(S s) if (isSlice!S && isContiguousVector!S) {
     return s._iterator[0 .. s.length!0];
 }
 
+import core.simd;
+
+pragma(LDC_intrinsic, "llvm.x86.fma.vfmadd.pd.256")
+double4 fmadd(double4, double4, double4);
+
+double dotAvx(const double[] vec1, const double[] vec2) {
+    double4 u1 = [0, 0, 0, 0];
+    double4 w1, x1;
+    immutable n = vec1.length;
+    immutable m = n - (n % 4);
+    for (size_t i = 0; i < m; i += 4) {
+        w1.array = vec1[i..i+4];
+        x1.array = vec2[i..i+4];
+        // u1 = fmadd(w1, x1, u1);
+        u1 += w1 * x1;
+    }
+
+    double ret = u1.array[0] + u1.array[1] + u1.array[2] + u1.array[3];
+    foreach (i; m .. n) {
+        ret += vec1[i] * vec2[i];
+    }
+    return ret;
+}
+
+unittest {
+    double[] a = [1, 2, 3, 4, 1, 2, 3, 4, 5];
+    double[] b = [-1, 2, -3, 4, -1, 2, -3, 4, 5];
+    // writeln(dotAvx(a, b), " vs ", (1*-1 + 2*2 + 3*-3 + 4*4) * 2);
+    assert(dotAvx(a, b) == (1*-1 + 2*2 + 3*-3 + 4*4) * 2 + 25);
+}
+
+
 pragma(inline, true)
 nothrow @nogc
 auto mapDot(S)(in S a, in S b) if (isSlice!S) {
@@ -63,7 +95,7 @@ in {
     auto bt = b.transposed.slice;
     foreach (i; 0 .. a.length!0) {
         foreach (j; 0 .. b.length!1) {
-            E ab = dotProduct(a[i].asarray, bt[j].asarray);
+            E ab = dotAvx(a[i].asarray, bt[j].asarray);
             c[i, j] = alpha * ab + beta * c[i, j];
         }
     }
@@ -90,7 +122,7 @@ in {
 }
 
 
-auto dotParallelUnrollGemm(size_t unroll, S, T=DeepElementType!S)(
+auto dotParallelUnrollGemm(size_t unroll=16, S, T=DeepElementType!S)(
     const T alpha, const S a, const S b, const T beta, ref S c) if (isSlice!S)
 in {
     assert(c.length!0 == a.length!0);
@@ -123,7 +155,7 @@ import ldc.attributes;
 import ldc.intrinsics;
 
 @fastmath
-auto expectDotParallelUnrollGemm(size_t unroll, S, T=DeepElementType!S)(
+auto expectDotParallelUnrollGemm(size_t unroll=16, S, T=DeepElementType!S)(
     const T alpha, const S a, const S b, const T beta, ref S c) if (isSlice!S)
 in {
     assert(c.length!0 == a.length!0);
@@ -154,50 +186,48 @@ in {
     }
 }
 
-
+alias glasGemm = G.gemm;
+alias blasGemm = gemm;
 
 void main()
 {
+    import std.format;
     import std.datetime.stopwatch;
+
     import numir : uniform, approxEqual, zeros;
+    enum nTrial = 10;
+    enum names = [
+        "blas",
+        // "naive",
+        "map",
+        "dot",
+        "dotParallel",
+        "dotParallelUnroll",
+        "expectDotParallelUnroll",
+        "glas"
+        ];
     foreach (m; [128, 256, 512, 1024]) {
+        writefln("m = %d", m);
         auto a = uniform(m, m).slice;
         auto b = uniform(m, m).slice;
         auto au = a.universal;
         auto bu = b.universal;
+        static foreach (name; names) {
+            static if (name == "glas") {
+                mixin("auto c" ~ name ~ " = zeros(a.length!0, b.length!1).universal;");
+            } else {
+                mixin("auto c" ~ name ~ " = zeros(a.length!0, b.length!1);");
+            }
 
-        auto cNaive = zeros(a.length!0, b.length!1);
-        auto cMap = zeros(a.length!0, b.length!1);
-        auto cDot = zeros(a.length!0, b.length!1);
-        auto cParallel = zeros(a.length!0, b.length!1);
-        auto cParallelUnroll = zeros(a.length!0, b.length!1);
-        auto cGlas = zeros(a.length!0, b.length!1).universal;
-        auto cBlas = zeros(a.length!0, b.length!1);
-
-        auto results = benchmark!(
-            () { naiveGemm(1, a, b, 0, cNaive); },
-            () { mapGemm(1, a, b, 0, cMap); },
-            () { dotGemm(1, a, b, 0, cDot); },
-            () { dotParallelGemm(1, a, b, 0, cParallel); },
-            () { dotParallelUnrollGemm!16(1, a, b, 0, cParallelUnroll); },
-            () { expectDotParallelUnrollGemm!16(1, a, b, 0, cParallelUnroll); },
-            () { G.gemm(1.0, au, bu, 0.0, cGlas); },
-            () { gemm(1, a, b, 0, cBlas); }
-            )(100);
-        writefln!"==== benchmark (m=%d) ===="(m);
-        writeln("naive:", results[0]);
-        writeln("mapSum:", results[1]);
-        writeln("std.numeric.dotProduct:", results[2]);
-        writeln("std.parallelism.parallel:", results[3]);
-        writeln("unroll:", results[4]);
-        writeln("expect:", results[5]);
-        writeln("glas:", results[6]);
-        writeln("blas:", results[7]);
-        enforce(approxEqual(cBlas, cNaive), "blas is invalid");
-        enforce(approxEqual(cMap, cNaive), "map is invalid");
-        enforce(approxEqual(cDot, cNaive), "dot is invalid");
-        enforce(approxEqual(cParallel, cNaive), "parallel is invalid");
-        enforce(approxEqual(cGlas, cNaive), "glas is invalid");
-        enforce(approxEqual(cParallelUnroll, cNaive), "unroll is invalid");
+            {
+                static if (name == "glas") {
+                    mixin(format!("auto result = benchmark!(() { %sGemm(1.0, a.universal, b.universal, 0.0, c%s); })(%d);")(name, name, nTrial));
+                } else {
+                    mixin(format!("auto result = benchmark!(() { %sGemm(1.0, a, b, 0.0, c%s); })(%d);")(name, name, nTrial));
+                }
+                writeln(name, ":", result[0] / nTrial);
+                mixin("enforce(approxEqual(cblas, c" ~ name ~ "), \"" ~ name ~ " is invalid\");");
+            }
+        }
     }
 }

@@ -11,6 +11,7 @@
         "numir": "~>0.0.10"
 	},
     "libs": ["openblas"],
+    "dflags": ["-mattr=+avx"],
     "lflags": ["-L$MIR_GLAS_PACKAGE_DIR", "-L$MIR_CPUID_PACKAGE_DIR"],
 	"description": "A minimal D application.",
 	"copyright": "Copyright © 2018, Shigeki Karita",
